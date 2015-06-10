@@ -47,9 +47,9 @@ class C {
 
 you can now write
 ```c++
-COMMONUNION(FooUnion,foo)
+COMMONUNION(FooUnion,,foo)
 ```
-which declares a (variadic template) type `FooUnion` that can hold any type (`A`, `B`, and `C` above are three examples) that declares a method called `foo`.
+which declares a (variadic template) type `FooUnion` that can hold any type (`A`, `B`, and `C` above are three examples) that declares a method called `foo`.  The middle blank parameter is explained below.
 
 A simple example of use:
 
@@ -103,7 +103,88 @@ constexpr auto newfactory(int i, int j, int k) {
 }
 ```
 	
+More details
+------------
 
+The common methods can be templated.  For example
+```c++
+struct bingocell {
+	char x;
+	int y;
+	constexpr bingocell(char x0, int y0) : x(x0), y(y0) {}
 
+	template<typename F>
+	constexpr auto sumop(ostream &os, const F &f) const {
+		f(x) + f(y);
+	}
+};
+struct lottonumbers {
+	int n[5];
+	template<typename F>
+	constexpr ostream &sumop(ostream &os, const F &f) const {
+		auto ret = f(n[0]);
+		for(int i=1;i<5;i++) ret += f(n[i]);
+		return ret;
+	}
+};
+struct numlucky { // better as lambda fn, but those aren't allowed in constexpr yet
+	constexpr int operator()(char c) const {
+		return c=='B' || c=='G';
+	}
+	constexpr int operator()(int i) const {
+		return i%7==0;
+	}
+};
 
+COMMONUNION(gamblingdraw,,sumop)
 
+constexpr gamblingdraw<bingocell,lottonumbers x{bingocell{'B',13}};
+constexpr int nlucky = x.sumop(numlucky{});
+```
+
+Hopefully as is obvious from the examples above, a common-union can be used in `constexpr` expressions provided the types to be "unioned" are trivial.  If they are not (for instance, if they have a non-trivial constructor), the common-union still works, but cannot be part of a `constexpr` expression.
+
+If you want the common methods to return a common-union themselves (because they return different types, that is also possible).  Here is a quick example (using the `struct`s above):
+
+```c++
+struct bingocaller {
+	constexpr bingocell draw() const {
+		return {'B',1}; // not very random!
+	}
+};
+struct lottoseller {
+	constexpr lottonumbers draw() const {
+		return {1,2,3,4,5}; // not very random!
+	}
+};
+
+COMMONUNION(gamblingpusher,,(gamblingdraw,draw))
+
+constexpr gamblingpusher<bingocaller,lottoseller> z{};
+constexpr auto s = z.draw();
+```
+`s` is of type `gamblingdraw<bingocell,lottonumbers>` which is automatically determined
+because the type of the type of `z` and the corresponding return types of `draw`.
+
+If you want the common-union type to have a base class, use the second argument to the `COMMONUNION` macro.  In particular,
+
+```c++
+COMMONUNION(myunion,: public othertype,foo,bar)
+```
+declares a (variadic template) of name `myunion`.  All instantiations of this templated type are derived from the type `othertype`.  They have public member functions `foo` and `bar`.  If the base class needs to reference the variadic types, they are called `Ts` in the template in which this second argument appears.  For instance
+```c++
+COMMONUNION(myunion,: public othertype<Ts...>,foo,bar)
+```
+does the same, but where `othertype` is also a variadic template.
+
+If you need to use the CRTP, things are more difficult.  In the current version, you cannot reference the type itself.  Instead, you should use `myunion_cu_impl` for the example above, and in general you should use the name of the type with `_cu_impl` tacked on on the end.
+
+Implementation
+--------------
+
+The implementation is relatively straight-forward.  It keeps a union of the underlying data types.  There is some trickiness for differentiating from trival types and non-trivial types (mainly because a destructor cannot be optionally included via SFINAE).  Additionally, it keeps a single integer to keep track of the "active" union member.  This integer is only just large enough to hold the necessary range of values.  That is, if there are fewer than 257 union members, a byte is used.  If there are fewer than 2^16+1, a 16-bit integer is used.  Finally a 32-bit integer is used for greater than 2^16.
+
+To Do
+-----
+* Add noexcept clauses to all methods.  All methods, constructors, destructors, etc should be noexcept if possible.  Not hard to add all of the clauses, just a pain.
+* Check to see if any compiler will allow more than 2^8 template arguments
