@@ -190,3 +190,5 @@ To Do
 -----
 * Add noexcept clauses to all methods.  All methods, constructors, destructors, etc should be noexcept if possible.  Not hard to add all of the clauses, just a pain.
 * Check to see if any compiler will allow more than 2^8 template arguments
+* Speed up compilation.  Too many classes:  Could just have single wrapper on the outside, if the insides
+	have a general (applyfn) method
