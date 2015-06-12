@@ -2,8 +2,7 @@ commonunion
 ===========
 Union of types with common member functions, suitable for use in constexpr, C++14 only
 
-At the moment (Jun 11, 2015), the only compiler compliant enough with the C++14 standard
-to fully work with this library is clang (version 3.5.0).
+At the moment (Jun 11, 2015), this works with clang (version 3.5.0) and gcc (version 5.1.1).
 
 Virtual member functions are terrific for implementing dynamic dispatch.  If you need dynamic dispatch, you should use the compile-supplied solution and not build your own.  
 

@@ -38,6 +38,24 @@ namespace commonunion {
 
 	using splittype::isargtype;
 
+     template<std::size_t N>
+     struct largeenoughint {
+          typedef typename std::conditional<
+					N<(1L<<8), uint_least8_t,
+                    typename std::conditional<
+                         N<(1L<<16), uint_least16_t,
+                    typename std::conditional<
+                         N<(1L<<32), uint_least32_t, uint_least64_t>::type
+                    >::type
+               >::type type;
+		//typedef std::size_t type;
+     };
+
+     template<typename... Ts> struct argstoindextype {
+          typedef typename largeenoughint<sizeof...(Ts)>::type type;
+     };
+
+
 	template<typename...> struct alltrivialcopy {
 		enum { value=1 };
 	};
@@ -50,6 +68,44 @@ namespace commonunion {
 
 	template<typename T>
 	using decay = typename std::decay<T>::type;
+
+	template<template<typename...> class, typename>
+	struct istemplateinst {
+		enum {value=0};
+	};
+
+	template<template<typename...> class H, typename... Ts>
+	struct istemplateinst<H,H<Ts...>> {
+		enum {value=1};
+	};
+
+	template<template<template<typename...> class,typename...> class, typename>
+	struct istemplateinst2 {
+		enum {value=0};
+	};
+
+	template<template<template<typename...> class,typename...> class H, template<typename...> class R, typename... Ts>
+	struct istemplateinst2<H,H<R,Ts...>> {
+		enum {value=1};
+	};
+
+	template<
+		template<template<typename...> class, typename...> class H,
+		template<typename...> class R,
+		typename T>
+	struct istemplateinst3 {
+		enum {value=0};
+	};
+
+	template< template<typename...> class R,
+		template<template<typename...> class, typename...> class H,
+		template<typename...> class H2,
+		typename... Ts>
+	struct istemplateinst3<H,R,H2<Ts...>> {
+		enum {value=std::is_base_of<H<R,Ts...>,H2<Ts...>>::value};
+	};
+
+
 
 	//------------------
 	//
@@ -136,20 +192,22 @@ namespace commonunion {
 
 
 	//------------------
+	
+	template<typename T>
+	constexpr bool lastbit(const T &x) { return x&1; }
 
-	struct gencunode {
-	};
+	template<typename T>
+	constexpr T restbits(const T &x) { return x>>1; }
+	
 
 	template<template<typename...> class, typename...> struct cu_node_base;
 
-
-
 	template<template<typename...> class R, typename T1, typename T2, typename... Ts>
-	struct cu_node_base<R,T1,T2,Ts...> : public gencunode {
+	struct cu_node_base<R,T1,T2,Ts...> {
 		using type1 = typename splittype::splitargtype_odds<R<T1,T2,Ts...>>::type;
 		using type2 = typename splittype::splitargtype_evens<R<T1,T2,Ts...>>::type;
 
-		using itype = std::size_t; // TODO
+		using itype = typename argstoindextype<T1,T2,Ts...>::type;
 
 		template<typename T, typename EN=void>
 		struct index { enum {value=0}; };
@@ -172,7 +230,8 @@ namespace commonunion {
 		constexpr cu_node_base(T &&t) : x(std::true_type{},std::forward<T>(t)) {}
 
 		template<typename... Ss>
-		constexpr cu_node_base(itype place, Ss &&...arg) : x(place&1,place>>1,std::forward<Ss>(arg)...) {}
+		constexpr cu_node_base(itype place, Ss &&...arg)
+			: x(lastbit(place),restbits(place),std::forward<Ss>(arg)...) {}
 
 		template<typename... Ss>
 		constexpr cu_node_base(itype fromplace, itype toplace, Ss &&...arg)
@@ -180,13 +239,14 @@ namespace commonunion {
 
 		template<typename... V>
 		void assign(itype fromplace, itype toplace, V &&...v) {
-			x.assign(fromplace&1,toplace&1,fromplace>>1,toplace>>1,std::forward<V>(v)...);
+			x.assign(lastbit(fromplace),lastbit(toplace),
+			  restbits(fromplace),restbits(toplace),std::forward<V>(v)...);
 		}
 
 		template<template<typename...> class R2, typename... Ss>
 		static constexpr typename cu_node_base<R2,Ss...>::itype reindex(itype i) {
-			if (i&1) return type2::template reindex<R2,Ss...>(i>>1);
-			else return type1::template reindex<R2,Ss...>(i>>1);
+			if (lastbit(i)) return type2::template reindex<R2,Ss...>(restbits(i));
+			else return type1::template reindex<R2,Ss...>(restbits(i));
 		}
 
 		template<typename T,
@@ -206,7 +266,7 @@ namespace commonunion {
 		T &&get() && { return std::move(x.t1.template get<T>()); }
 		template<typename T,
 			typename std::enable_if<!isargtype<decay<T>,type1>::value>::type *En=nullptr>
-		T &get() && { return std::move(x.t2.template get<T>()); }
+		T &&get() && { return std::move(std::move(x).t2.template get<T>()); }
 
 		constexpr void predelete(itype) {}
 
@@ -215,8 +275,11 @@ namespace commonunion {
 
 
 	template<template<typename...> class R, typename T1>
-	struct cu_node_base<R,T1> : public gencunode {
-		using itype = std::size_t; // TODO
+	struct cu_node_base<R,T1> {
+		template<template<typename...> class S, typename... Ss>
+		using mybase = cu_node_base<S,Ss...>;
+		using itype = typename argstoindextype<T1>::type;
+
 
 		template<typename T, typename EN=void>
 		struct index { enum {value=0}; };
@@ -250,7 +313,8 @@ namespace commonunion {
 		constexpr cu_node_base(itype place, R<Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
 
 
-		template<typename V, typename std::enable_if<!std::is_base_of<gencunode,decay<V>>::value>::type *En=nullptr>
+		template<typename V,
+			typename std::enable_if<!istemplateinst<R,decay<V>>::value>::type *En=nullptr>
 		void assign(itype fromplace, itype toplace, V &&v) {
 			t1 = v;
 		}
@@ -284,6 +348,12 @@ namespace commonunion {
 		template<typename T,
 			typename std::enable_if<!std::is_same<T,T1>::value>::type *En=nullptr>
 		constexpr const T &get() const { throw std::logic_error("invalid type conversion"); }
+		template<typename T,
+			typename std::enable_if<!std::is_same<T,T1>::value>::type *En=nullptr>
+		constexpr T &get() & { throw std::logic_error("invalid type conversion"); }
+		template<typename T,
+			typename std::enable_if<!std::is_same<T,T1>::value>::type *En=nullptr>
+		constexpr T &&get() && { throw std::logic_error("invalid type conversion"); }
 
 		constexpr void predelete(itype) {}
 		T1 t1;
@@ -301,9 +371,9 @@ namespace commonunion {
 		using type2 = typename B::type2;
 
 		constexpr void predelete(itype i) {
-			if (i&1) this->x.t2.predelete(i>>1);
-			else this->x.t1.predelete(i>>1);
-			this->x.predelete(i&1);
+			if (lastbit(i)) this->x.t2.predelete(restbits(i));
+			else this->x.t1.predelete(restbits(i));
+			this->x.predelete(lastbit(i));
 		}
 
 	};
@@ -325,15 +395,17 @@ namespace commonunion {
 				cu_node_nontriv<R,Ts...>>::type;
 
 	//-------------------------------
-	struct gencu {};
 
 	template<template<typename...> class R, typename... Ts>
-	struct cu_impl_base : public gencu {
+	struct cu_impl_base { 
 		using baseT = R<Ts...>;
 		baseT v;
 		typename baseT::itype i;
+		template<template<typename...> class S, typename... Ss>
+		using mybase = cu_impl_base<S,Ss...>;
 
-		template<typename T, typename std::enable_if<!std::is_base_of<gencu,decay<T>>::value>::type *En=nullptr>
+		template<typename T,
+			typename std::enable_if<!istemplateinst3<mybase,R,decay<T>>::value>::type *En=nullptr>
 		explicit constexpr cu_impl_base(T &&t) : v(std::forward<T>(t)),
 				i(baseT::template index<decay<T>>::value) {}
 
@@ -350,7 +422,8 @@ namespace commonunion {
 				: v(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i),std::move(c.v)),
 				  i(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i)) {}
 
-		template<typename T, typename std::enable_if<!std::is_base_of<gencu,decay<T>>::value>::type *En=nullptr>
+		template<typename T,
+			typename std::enable_if<!istemplateinst3<mybase,R,decay<T>>::value>::type *En=nullptr>
 		cu_impl_base &operator=(T &&t) {
 			auto oldi = i;
 			i = baseT::template index<decay<T>>::value;
@@ -417,27 +490,27 @@ namespace commonunion {
 #define WRITEIMPLN1(fname) \
 			template<typename... Ss> \
 			constexpr auto fname##_impl(itype i, Ss &&...args) const { \
-				return (i&1) ? this->x.t2.fname##_impl(i>>1,std::forward<Ss>(args)...): \
-					this->x.t1.fname##_impl(i>>1,std::forward<Ss>(args)...); \
+				return lastbit(i) ? this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...): \
+					this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...); \
 			} \
 			template<typename... Ss> \
 			constexpr auto fname##_impl(itype i, Ss &&...args) { \
-				return (i&1) ? this->x.t2.fname##_impl(i>>1,std::forward<Ss>(args)...): \
-					this->x.t1.fname##_impl(i>>1,std::forward<Ss>(args)...); \
+				return lastbit(i) ? this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...): \
+					this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...); \
 			} \
 
 #define WRITEIMPLN2(uname,fname) \
 			template<typename... Ss> \
 			constexpr auto fname##_impl(itype i, Ss &&...args) const { \
 				return CUEXPRSELECT(uname, \
-					(i&1),(this->x.t2.fname##_impl(i>>1,std::forward<Ss>(args)...)), \
-					      (this->x.t1.fname##_impl(i>>1,std::forward<Ss>(args)...))); \
+					lastbit(i),(this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...)), \
+					      (this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...))); \
 			} \
 			template<typename... Ss> \
 			constexpr auto fname##_impl(itype i, Ss &&...args) { \
 				return CUEXPRSELECT(uname, \
-					(i&1),(this->x.t2.fname##_impl(i>>1,std::forward<Ss>(args)...)), \
-					      (this->x.t1.fname##_impl(i>>1,std::forward<Ss>(args)...))); \
+					lastbit(i),(this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...)), \
+					      (this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...))); \
 			} \
 
 #define WRITEIMPL(ARG) CALLVAR_N2(WRITEIMPLN,STRIPPAREN(ARG))
@@ -512,7 +585,7 @@ namespace commonunion { \
  \
 		template<typename... Ts> \
 		struct cu_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
-				public ::commonunion::cu_impl<cu_node,Ts...> IFEMPTY(IGNOREARG,COMMAARG,baseclause,baseclause) { \
+				public ::commonunion::cu_impl<cu_node,Ts...> { \
 			using B = ::commonunion::cu_impl<commonunion::cname##union::cu_node,Ts...>; \
 			using B::B; \
 			using B::operator=; \
