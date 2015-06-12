@@ -2,6 +2,9 @@ commonunion
 ===========
 Union of types with common member functions, suitable for use in constexpr, C++14 only
 
+At the moment (Jun 11, 2015), the only compiler compliant enough with the C++14 standard
+to fully work with this library is clang (version 3.5.0).
+
 Virtual member functions are terrific for implementing dynamic dispatch.  If you need dynamic dispatch, you should use the compile-supplied solution and not build your own.  
 
 *However*, C++ does not directly support two things:
@@ -28,17 +31,17 @@ How to use
 This is best illustrated by an example.  Consider you have three classes.  They differ in how `foo` treats its argument and in what they store.
 
 ```c++
-class A {
+struct A {
 	int i;
 	constexpr A(int initi) : i(initi) {}
 	constexpr int foo(int a) const { return i+a; }
 };
-class B {
+struct B {
 	int i;
 	constexpr B(int initi) : i(initi) {}
 	constexpr int foo(int a) const { return i*a; }
 };
-class C {
+struct C {
 	int i,j;
 	constexpr C(int initi, int initj) : i(initi), j(initj) {}
 	constexpr int foo(int a) const { return (i+(j*a))/j; }
@@ -56,7 +59,7 @@ A simple example of use:
 ```c++
 constexpr FooUnion<A,B> AorB{B{1}};
 constexpr FooUnion<C,A> CorA{C{3,2}};
-constexpr FooUnion<B,C,A> anyABC{C{1,2}};
+constexpr FooUnion<B,C,A> anyABC{C{7,2}};
 constexpr int res1 = AorB.foo(5);
 constexpr int res2 = CorA.foo(5);
 constexpr int res3 = anyABC.foo(5);
@@ -177,7 +180,7 @@ COMMONUNION(myunion,: public othertype<Ts...>,foo,bar)
 ```
 does the same, but where `othertype` is also a variadic template.
 
-If you need to use the CRTP, things are more difficult.  In the current version, you cannot reference the type itself.  Instead, you should use `myunion_cu_impl` for the example above, and in general you should use the name of the type with `_cu_impl` tacked on on the end.
+If you need to use the CRTP, things are more difficult.  In the current version, you cannot reference the type itself.  Instead, you should use `cu_impl` (which is, in the local namespace in which the macro is invoked, the name of the class).
 
 Implementation
 --------------
