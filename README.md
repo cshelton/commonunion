@@ -192,3 +192,4 @@ To Do
 * Check to see if any compiler will allow more than 2^8 template arguments
 * Speed up compilation.  Too many classes:  Could just have single wrapper on the outside, if the insides
 	have a general (applyfn) method
+* add support for "void" return values
