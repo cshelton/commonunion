@@ -1,6 +1,5 @@
 #include "commonunion.h"
 
-
 COMMONUNION(FooUnion,,foo,bar)
 
 struct A {
