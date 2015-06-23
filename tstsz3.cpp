@@ -1,5 +1,6 @@
 #include <iostream>
 #include <typeinfo>
+#include "splittype.h"
 
 using namespace std;
 
@@ -95,6 +96,15 @@ struct FooUnionimpl<T> {
 	constexpr R get() const { return t; }
 	template<typename R, typename std::enable_if<!std::is_same<T,R>::value>::type *En=nullptr>
 	constexpr R get() const { throw std::logic_error("invalid type conversion"); }
+
+	void assigndirect(itype fi,T &&tt) { t = std::move(tt); }
+	void assigndirect(itype fi,const T &tt) { t = tt; }
+
+	template<typename TT, typename std::enable_if<!std::is_same<typename std::decay<TT>::type,T>::value>::type *En=nullptr>
+	void assigndirect(itype, TT &&) { throw std::logic_error("invalid type conversion"); }
+
+	template<typename TT>
+	void assign(itype fi,itype ti,TT &&tt) { t = std::forward<TT>(tt).template get<T>(); }
 };
 
 template<typename T1, typename... Ts>
@@ -124,6 +134,22 @@ struct FooUnionimpl<T1,Ts...> {
 	template<typename T, typename std::enable_if<!std::is_same<T,T1>::value>::type *En=nullptr>
 	constexpr T get() const { return t2.template get<T>(); }
 	
+	template<typename TT, typename std::enable_if<!std::is_same<typename std::decay<TT>::type,T1>::value>::type *En=nullptr>
+	void assigndirect(itype fi,TT &&tt) {
+		t2.assigndirect(fi-1,std::forward<TT>(tt));
+	}
+	void assigndirect(itype fi,T1 &&tt) {
+		t1 = std::move(tt);
+	}
+	void assigndirect(itype fi,const T1 &tt) {
+		t1 = tt;
+	}
+
+	template<typename TT>
+	void assign(itype fi,itype ti,TT &&tt) {
+		if (ti==0) t1 = std::forward<TT>(tt).template get<T1>();
+		else t2.assign(fi-1,ti-1,std::forward<TT>(tt));
+	}
 };
 
 template<typename...> struct inlst;
@@ -149,6 +175,27 @@ struct FooUnion {
 	template<typename... Ss>
 	constexpr FooUnion(const FooUnion<Ss...> &fu) : x(reindex<typelist<Ss...>,typelist<Ts...>>(fu.i),fu.x),
 									i(reindex<typelist<Ss...>,typelist<Ts...>>(fu.i)) {}
+
+	template<typename T, typename std::enable_if<inlst<typename std::decay<T>::type,Ts...>::value>::type *En=nullptr>
+	FooUnion &operator=(T &&t) {
+		x.assigndirect(i,std::forward<T>(t));
+		i = index<T,Ts...>::value;
+		return *this;
+	}
+	template<typename... Ss>
+	FooUnion &operator=(const FooUnion<Ss...> &fu) {
+		auto oldi = i;
+		i = reindex<typelist<Ss...>,typelist<Ts...>>(fu.i);
+		x.assign(oldi,i,fu.x);
+		return *this;
+	}
+	template<typename... Ss>
+	FooUnion &operator=(FooUnion<Ss...> &&fu) {
+		auto oldi = i;
+		i = reindex<typelist<Ss...>,typelist<Ts...>>(fu.i);
+		x.assign(oldi,i,std::move(fu.x));
+		return *this;
+	}
 };
 
 #include "commonunion.h"
@@ -156,7 +203,12 @@ COMMONUNION(FooUnionOrig,,foo)
 
 template<typename... Ts>
 //using FooU = FooUnionOrig<Ts...>; // 12 seconds
-using FooU = FooUnion<Ts...>; // 0.4 seconds
+//using FooU = FooUnion<Ts...>; // 0.4 seconds
+using FooU = typename splittype::stripdupargs<
+			typename splittype::flattentype<
+				FooUnion<>,Ts...
+			>::type
+			>::type; // 16 seconds! (stripdupargs takes all of the time!)
 
 int main(int argc, char **argv) {
 /*
@@ -167,12 +219,20 @@ int main(int argc, char **argv) {
 	fu2.foo();
 */
 /* was 0.28 seconds to compile
- * after adding copy constructor and get, moved to 0.37 seconds */
+ * after adding copy constructor and get, moved to 0.37 seconds
+ * after adding the two assignments: 0.42 seconds */
 	FooU<A,C,D,E,F,G,H,I,J,K,L,M,N,O,B> fu{B{}};
 	fu.foo();
 
 	FooU<A,B,C,D,E,F,G,H,I,J,Z,K,L,M,N,O> fu2{fu};
 	fu2.foo();
+
+	fu2 = fu;
+	fu2.foo();
+
+	fu2 = C{};
+	fu2.foo();
+	
 /*
  */
 }
