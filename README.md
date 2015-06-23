@@ -12,6 +12,8 @@ Virtual member functions are terrific for implementing dynamic dispatch.  If you
 
 This library provides these two things, but loses the universalism of virtual classes.  In particular, the set of possible classes for a particular variable must be known at compile time (and therefore must be finite).
 
+It is similar to Boost's Variant library.  However, this one has been expressly designed for `constexpr` use.  It gives up some of the guarentees if an exception is thrown during assignment.  However, it adds syntax sugar for creating one based on a runtime (or compile time) Boolean test.
+
 Overview
 --------
 

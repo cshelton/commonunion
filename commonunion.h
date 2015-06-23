@@ -32,7 +32,13 @@
 #include "macroforeach.h"
 
 // TODO: add except conditions on all methods & functions
-// TODO: add variable-sized itype
+
+#define CUEXPRSELECT(uname,cond,restrue,resfalse) \
+     (cond) ? uname<typename std::decay<decltype(restrue)>::type, \
+                              typename std::decay<decltype(resfalse)>::type>{restrue} \
+          : uname<typename std::decay<decltype(restrue)>::type, \
+                              typename std::decay<decltype(resfalse)>::type>{resfalse}
+
 
 namespace commonunion {
 
@@ -79,33 +85,15 @@ namespace commonunion {
 		enum {value=1};
 	};
 
-	template<template<template<typename...> class,typename...> class, typename>
-	struct istemplateinst2 {
+	template<template<typename...> class, typename>
+	struct istemplatebase {
 		enum {value=0};
 	};
 
-	template<template<template<typename...> class,typename...> class H, template<typename...> class R, typename... Ts>
-	struct istemplateinst2<H,H<R,Ts...>> {
-		enum {value=1};
+	template<template<typename...> class H, template<typename...> class H2, typename... Ts>
+	struct istemplatebase<H,H2<Ts...>> {
+		enum {value=std::is_base_of<H<Ts...>,H2<Ts...>>::value};
 	};
-
-	template<
-		template<template<typename...> class, typename...> class H,
-		template<typename...> class R,
-		typename T>
-	struct istemplateinst3 {
-		enum {value=0};
-	};
-
-	template< template<typename...> class R,
-		template<template<typename...> class, typename...> class H,
-		template<typename...> class H2,
-		typename... Ts>
-	struct istemplateinst3<H,R,H2<Ts...>> {
-		enum {value=std::is_base_of<H<R,Ts...>,H2<Ts...>>::value};
-	};
-
-
 
 	//------------------
 	//
@@ -200,13 +188,12 @@ namespace commonunion {
 	constexpr T restbits(const T &x) { return x>>1; }
 	
 
-	template<template<typename...> class, typename...> struct cu_node_base;
+	template<typename...> struct cu_node_base;
 
-	template<template<typename...> class R, typename T1, typename T2, typename... Ts>
-	struct cu_node_base<R,T1,T2,Ts...> {
-		using type1 = typename splittype::splitargtype_odds<R<T1,T2,Ts...>>::type;
-		using type2 = typename splittype::splitargtype_evens<R<T1,T2,Ts...>>::type;
-
+	template<typename T1, typename T2, typename... Ts>
+	struct cu_node_base<T1,T2,Ts...> {
+		using type1 = typename splittype::splitargtype_odds<cu_node_base<T1,T2,Ts...>>::type;
+		using type2 = typename splittype::splitargtype_evens<cu_node_base<T1,T2,Ts...>>::type;
 		using itype = typename argstoindextype<T1,T2,Ts...>::type;
 
 		template<typename T, typename EN=void>
@@ -243,10 +230,11 @@ namespace commonunion {
 			  restbits(fromplace),restbits(toplace),std::forward<V>(v)...);
 		}
 
-		template<template<typename...> class R2, typename... Ss>
-		static constexpr typename cu_node_base<R2,Ss...>::itype reindex(itype i) {
-			if (lastbit(i)) return type2::template reindex<R2,Ss...>(restbits(i));
-			else return type1::template reindex<R2,Ss...>(restbits(i));
+		template<typename... Ss>
+		static constexpr typename cu_node_base<Ss...>::itype reindex(itype i) {
+			if (lastbit(i))
+				return type2::template reindex<Ss...>(restbits(i));
+			else return type1::template reindex<Ss...>(restbits(i));
 		}
 
 		template<typename T,
@@ -270,16 +258,48 @@ namespace commonunion {
 
 		constexpr void predelete(itype) {}
 
+		template<typename F, typename... Ss>
+		constexpr auto callfn(itype i, F &&f, Ss &&...args) const {
+			if (lastbit(i)) return x.t2.callfn(restbits(i),std::forward<F>(f),std::forward<Ss>(args)...);
+			else return x.t1.callfn(restbits(i),std::forward<F>(f),std::forward<Ss>(args)...);
+		}
+		template<typename F, typename... Ss>
+		constexpr auto callfn(itype i, F &&f, Ss &&...args) {
+			if (lastbit(i)) return x.t2.callfn(restbits(i),std::forward<F>(f),std::forward<Ss>(args)...);
+			else return x.t1.callfn(restbits(i),std::forward<F>(f),std::forward<Ss>(args)...);
+		}
+		template<template<typename...> class R, typename F, typename... Ss>
+		constexpr auto callfnunion(itype i, F &&f, Ss &&...args) const {
+			return CUEXPRSELECT(R,
+				(lastbit(i)),
+					(x.t1.template callfnunion<R>(restbits(i),
+						std::forward<F>(f),
+						std::forward<Ss>(args)...)),
+					(x.t2.template callfnunion<R>(restbits(i),
+						std::forward<F>(f),
+						std::forward<Ss>(args)...)));
+		}
+		template<template<typename...> class R, typename F, typename... Ss>
+		constexpr auto callfnunion(itype i, F &&f, Ss &&...args) {
+			return CUEXPRSELECT(R,
+				(lastbit(i)),
+					(x.t1.template callfnunion<R>(restbits(i),
+						std::forward<F>(f),
+						std::forward<Ss>(args)...)),
+					(x.t2.template callfnunion<R>(restbits(i),
+						std::forward<F>(f),
+						std::forward<Ss>(args)...)));
+		}
+
 		delunion<type1,type2> x;
 	};
 
 
-	template<template<typename...> class R, typename T1>
-	struct cu_node_base<R,T1> {
-		template<template<typename...> class S, typename... Ss>
-		using mybase = cu_node_base<S,Ss...>;
+	template<typename T1>
+	struct cu_node_base<T1> {
 		using itype = typename argstoindextype<T1>::type;
-
+		template<typename... Ss>
+		using mybase = cu_node_base<Ss...>;
 
 		template<typename T, typename EN=void>
 		struct index { enum {value=0}; };
@@ -294,45 +314,38 @@ namespace commonunion {
 		constexpr cu_node_base(itype fromplace, itype toplace, Ts &&...arg)
 				: cu_node_base(toplace,std::forward<Ts>(arg)...) {}
 
-		template<template<typename...> class R2, typename... Ss>
-		constexpr cu_node_base(const cu_node_base<R2,Ss...> &c) : t1(c.template get<T1>()) {}
-
-		template<template<typename...> class R2, typename... Ss>
-		constexpr cu_node_base(cu_node_base<R2,Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
-
-		template<template<typename...> class R2, typename... Ss>
-		constexpr cu_node_base(itype place, const cu_node_base<R2,Ss...> &c) : t1(c.template get<T1>()) {}
-
-		template<template<typename...> class R2, typename... Ss>
-		constexpr cu_node_base(itype place, cu_node_base<R2,Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
+		template<typename... Ss>
+		constexpr cu_node_base(const cu_node_base<Ss...> &c) : t1(c.template get<T1>()) {}
 
 		template<typename... Ss>
-		constexpr cu_node_base(itype place, const R<Ss...> &c) : t1(c.template get<T1>()) {}
+		constexpr cu_node_base(cu_node_base<Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
 
 		template<typename... Ss>
-		constexpr cu_node_base(itype place, R<Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
+		constexpr cu_node_base(itype place, const cu_node_base<Ss...> &c) : t1(c.template get<T1>()) {}
 
+		template<typename... Ss>
+		constexpr cu_node_base(itype place, cu_node_base<Ss...> &&c) : t1(std::move(c).template get<T1>()) {}
 
 		template<typename V,
-			typename std::enable_if<!istemplateinst<R,decay<V>>::value>::type *En=nullptr>
+			typename std::enable_if<!istemplateinst<mybase,decay<V>>::value>::type *En=nullptr>
 		void assign(itype fromplace, itype toplace, V &&v) {
 			t1 = v;
 		}
 
-		template<template<typename...> class R2, typename... Ss>
-		void assign(itype fromplace, itype toplace, const cu_node_base<R2,Ss...> &c) {
+		template<typename... Ss>
+		void assign(itype fromplace, itype toplace, const cu_node_base<Ss...> &c) {
 			t1 = c.template get<T1>();
 		}
 
-		template<template<typename...> class R2, typename... Ss>
-		void assign(itype fromplace, itype toplace, cu_node_base<R2,Ss...> &&c) {
+		template<typename... Ss>
+		void assign(itype fromplace, itype toplace, cu_node_base<Ss...> &&c) {
 			t1 = std::move(c).template get<T1>();
 		}
 			
 
-		template<template<typename...> class R2, typename... Ss>
-		static constexpr typename cu_node_base<R2,Ss...>::itype reindex(itype i) {
-			return cu_node_base<R2,Ss...>::template index<T1>::value;
+		template<typename... Ss>
+		static constexpr typename cu_node_base<Ss...>::itype reindex(itype i) {
+			return cu_node_base<Ss...>::template index<T1>::value;
 		}
 
 		template<typename T,
@@ -355,16 +368,33 @@ namespace commonunion {
 			typename std::enable_if<!std::is_same<T,T1>::value>::type *En=nullptr>
 		constexpr T &&get() && { throw std::logic_error("invalid type conversion"); }
 
+		template<typename F, typename... Ss>
+		constexpr auto callfn(itype i, F &&f, Ss &&...args) const {
+			return f(t1,std::forward<Ss>(args)...);
+		}
+		template<typename F, typename... Ss>
+		constexpr auto callfn(itype i, F &&f, Ss &&...args) {
+			return f(t1,std::forward<Ss>(args)...);
+		}
+		template<template<typename...> class, typename F, typename... Ss>
+		constexpr auto callfnunion(itype i, F &&f, Ss &&...args) const {
+			return f(t1,std::forward<Ss>(args)...);
+		}
+		template<template<typename...> class, typename F, typename... Ss>
+		constexpr auto callfnunion(itype i, F &&f, Ss &&...args) {
+			return f(t1,std::forward<Ss>(args)...);
+		}
+
 		constexpr void predelete(itype) {}
 		T1 t1;
 	};
 	//-------------------------------
 
-	template<template<typename...> class, typename...> struct cu_node_nontriv;
+	template<typename...> struct cu_node_nontriv;
 
-	template<template<typename...> class R, typename T1, typename T2, typename... Ts>
-	struct cu_node_nontriv<R,T1,T2,Ts...> : cu_node_base<R,T1,T2,Ts...> {
-		using B = cu_node_base<R,T1,T2,Ts...>;
+	template<typename T1, typename T2, typename... Ts>
+	struct cu_node_nontriv<T1,T2,Ts...> : cu_node_base<T1,T2,Ts...> {
+		using B = cu_node_base<T1,T2,Ts...>;
 		using B::B;
 		using itype = typename B::itype;
 		using type1 = typename B::type1;
@@ -378,9 +408,9 @@ namespace commonunion {
 
 	};
 
-	template<template<typename...> class R, typename T1>
-	struct cu_node_nontriv<R,T1> : cu_node_base<R,T1> {
-		using B = cu_node_base<R,T1>;
+	template<typename T1>
+	struct cu_node_nontriv<T1> : cu_node_base<T1> {
+		using B = cu_node_base<T1>;
 		using itype = typename B::itype;
 		using B::B;
 
@@ -388,42 +418,42 @@ namespace commonunion {
 
 	//-------------------------------
 
-	template<template<typename...> class R, typename...Ts>
+	template<typename...Ts>
 	using cu_node = typename std::conditional<
 			alltrivialcopy<Ts...>::value,
-				cu_node_base<R,Ts...>,
-				cu_node_nontriv<R,Ts...>>::type;
+				cu_node_base<Ts...>,
+				cu_node_nontriv<Ts...>>::type;
 
 	//-------------------------------
 
-	template<template<typename...> class R, typename... Ts>
+	template<typename... Ts>
 	struct cu_impl_base { 
-		using baseT = R<Ts...>;
+		using baseT = cu_node<Ts...>;
 		baseT v;
 		typename baseT::itype i;
-		template<template<typename...> class S, typename... Ss>
-		using mybase = cu_impl_base<S,Ss...>;
+		template<typename... Ss>
+		using mybase = cu_impl_base<Ss...>;
 
 		template<typename T,
-			typename std::enable_if<!istemplateinst3<mybase,R,decay<T>>::value>::type *En=nullptr>
+			typename std::enable_if<!istemplatebase<mybase,decay<T>>::value>::type *En=nullptr>
 		explicit constexpr cu_impl_base(T &&t) : v(std::forward<T>(t)),
 				i(baseT::template index<decay<T>>::value) {}
 
 		explicit constexpr cu_impl_base(const cu_impl_base &c) : v(c.i,c.v), i(c.i) {}
 		explicit constexpr cu_impl_base(cu_impl_base &&c) : v(c.i,std::move(c.v)), i(c.i) {}
 
-		template<template<typename...> class R2, typename... Ss>
-		explicit constexpr cu_impl_base(const cu_impl_base<R2,Ss...> &c)
-				: v(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i),c.v),
-				  i(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i)) {}
+		template<typename... Ss>
+		explicit constexpr cu_impl_base(const cu_impl_base<Ss...> &c)
+				: v(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i),c.v),
+				  i(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i)) {}
 
-		template<template<typename...> class R2, typename... Ss>
-		explicit constexpr cu_impl_base(cu_impl_base<R2,Ss...> &&c)
-				: v(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i),std::move(c.v)),
-				  i(cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i)) {}
+		template<typename... Ss>
+		explicit constexpr cu_impl_base(cu_impl_base<Ss...> &&c)
+				: v(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i),std::move(c.v)),
+				  i(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i)) {}
 
 		template<typename T,
-			typename std::enable_if<!istemplateinst3<mybase,R,decay<T>>::value>::type *En=nullptr>
+			typename std::enable_if<!istemplatebase<mybase,decay<T>>::value>::type *En=nullptr>
 		cu_impl_base &operator=(T &&t) {
 			auto oldi = i;
 			i = baseT::template index<decay<T>>::value;
@@ -443,26 +473,35 @@ namespace commonunion {
 			v.assign(oldi,i,std::move(c.v));
 			return *this;
 		}
-		template<template<typename...> class R2, typename... Ss>
-		cu_impl_base &operator=(const cu_impl_base<R2,Ss...> &c) {
+		template<typename... Ss>
+		cu_impl_base &operator=(const cu_impl_base<Ss...> &c) {
 			auto oldi = i;
-			i = cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i);
+			i = cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i);
 			v.assign(oldi,i,c.v);
 			return *this;
 		}
-		template<template<typename...> class R2, typename... Ss>
-		cu_impl_base &operator=(cu_impl_base<R2,Ss...> &&c) {
+		template<typename... Ss>
+		cu_impl_base &operator=(cu_impl_base<Ss...> &&c) {
 			auto oldi = i;
-			i = cu_impl_base<R2,Ss...>::baseT::template reindex<R,Ts...>(c.i);
+			i = cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i);
 			v.assign(oldi,i,std::move(c.v));
 			return *this;
 		}
 
+		template<typename F, typename... Ss>
+		constexpr auto callfn(F &&f, Ss &&...args) const {
+			return v.callfn(i,std::forward<F>(f),std::forward<Ss>(args)...);
+		}
+		template<typename F, typename... Ss>
+		constexpr auto callfn(F &&f, Ss &&...args) {
+			return v.callfn(i,std::forward<F>(f),std::forward<Ss>(args)...);
+		}
+
 	};
 
-	template<template<typename...> class R, typename... Ts>
-	struct cu_impl_nontriv : public cu_impl_base<R,Ts...> {
-		using B = cu_impl_base<R,Ts...>;
+	template<typename... Ts>
+	struct cu_impl_nontriv : public cu_impl_base<Ts...> {
+		using B = cu_impl_base<Ts...>;
 		using B::B;
 
 		using B::operator=;
@@ -471,83 +510,44 @@ namespace commonunion {
 	};
 
 	//--------------------------
-	template<template<typename...> class R, typename...Ts>
+	template<typename...Ts>
 	using cu_impl = typename std::conditional<
 			alltrivialcopy<Ts...>::value,
-				cu_impl_base<R,Ts...>,
-				cu_impl_nontriv<R,Ts...>>::type;
+				cu_impl_base<Ts...>,
+				cu_impl_nontriv<Ts...>>::type;
 
-	//-------------------------------
 }
 
-#define CUEXPRSELECT(uname,cond,restrue,resfalse) \
-     (cond) ? uname<typename std::decay<decltype(restrue)>::type, \
-                              typename std::decay<decltype(resfalse)>::type>{restrue} \
-          : uname<typename std::decay<decltype(restrue)>::type, \
-                              typename std::decay<decltype(resfalse)>::type>{resfalse}
 
-
-#define WRITEIMPLN1(fname) \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) const { \
-				return lastbit(i) ? this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...): \
-					this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...); \
-			} \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) { \
-				return lastbit(i) ? this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...): \
-					this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...); \
-			} \
-
-#define WRITEIMPLN2(uname,fname) \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) const { \
-				return CUEXPRSELECT(uname, \
-					lastbit(i),(this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...)), \
-					      (this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...))); \
-			} \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) { \
-				return CUEXPRSELECT(uname, \
-					lastbit(i),(this->x.t2.fname##_impl(restbits(i),std::forward<Ss>(args)...)), \
-					      (this->x.t1.fname##_impl(restbits(i),std::forward<Ss>(args)...))); \
-			} \
-
-#define WRITEIMPL(ARG) CALLVAR_N2(WRITEIMPLN,STRIPPAREN(ARG))
-
-#define WRITEBASEIMPLN1(fname) \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) const \
-				{ return this->t1.fname(std::forward<Ss>(args)...);} \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) \
-				{ return this->t1.fname(std::forward<Ss>(args)...);} \
-
-#define WRITEBASEIMPLN2(rettype,fname) \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) const \
-				{ return this->t1.fname(std::forward<Ss>(args)...);} \
-			template<typename... Ss> \
-			constexpr auto fname##_impl(itype i, Ss &&...args) \
-				{ return this->t1.fname(std::forward<Ss>(args)...);} \
-
-#define WRITEBASEIMPL(ARG) CALLVAR_N2(WRITEBASEIMPLN,STRIPPAREN(ARG))
-
+// Note:: cannot use lambda-expression below, as they are not allowed in
+// constexpr yet
 #define WRITEDISPATCHN1(fname) \
-			template<typename... Ss> \
-			constexpr auto fname(Ss &&...args) const \
-				{ return this->v.fname##_impl(this->i,std::forward<Ss>(args)...);} \
-			template<typename... Ss> \
-			constexpr auto fname(Ss &&...args) \
-				{ return this->v.fname##_impl(this->i,std::forward<Ss>(args)...);} \
+	struct exec_##fname { \
+		template<typename T, typename... Args> \
+		constexpr auto operator()(T &&t, Args &&...args) const { \
+			return (std::forward<T>(t)).fname(std::forward<Args>(args)...); \
+		} \
+	}; \
+	template<typename... Ss> \
+	constexpr auto fname(Ss &&...args) const \
+		{ return this->callfn(exec_##fname{},std::forward<Ss>(args)...);} \
+	template<typename... Ss> \
+	constexpr auto fname(Ss &&...args) \
+		{ return this->callfn(exec_##fname{},std::forward<Ss>(args)...);} \
 
 #define WRITEDISPATCHN2(rettype,fname) \
-			template<typename... Ss> \
-			constexpr auto fname(Ss &&...args) const \
-				{ return this->v.fname##_impl(this->i,std::forward<Ss>(args)...);} \
-			template<typename... Ss> \
-			constexpr auto fname(Ss &&...args) \
-				{ return this->v.fname##_impl(this->i,std::forward<Ss>(args)...);} \
+	struct exec_##fname { \
+		template<typename T, typename... Args> \
+		constexpr auto operator()(T &&t, Args &&...args) const { \
+			return (std::forward<T>(t)).fname(std::forward<Args>(args)...); \
+		} \
+	}; \
+	template<typename... Ss> \
+	constexpr auto fname(Ss &&...args) const \
+		{ return this->callfnunion<rettype>(exec_##fname{},std::forward<Ss>(args)...);} \
+	template<typename... Ss> \
+	constexpr auto fname(Ss &&...args) \
+		{ return this->callfnunion<rettype>(exec_##fname{},std::forward<Ss>(args)...);} \
 
 #define WRITEDISPATCH(ARG) CALLVAR_N2(WRITEDISPATCHN,STRIPPAREN(ARG))
 
@@ -556,47 +556,19 @@ namespace commonunion {
 #define ARGCOMMA(x) x,
 
 #define COMMONUNION(cname,baseclause,...) \
-\
-namespace commonunion { \
-	namespace cname##union { \
- \
-		template<typename...> struct cu_node; \
-		template<typename...> struct cu_impl; \
- \
-		template<typename T1, typename T2, typename... Ts> \
-		struct cu_node<T1,T2,Ts...> : public ::commonunion::cu_node<cu_node,T1,T2,Ts...> { \
-			using B = ::commonunion::cu_node<commonunion::cname##union::cu_node,T1,T2,Ts...>; \
-			using itype = typename B::itype; \
- \
-			using B::B; \
-			FOREACH(WRITEIMPL,__VA_ARGS__) \
-		}; \
- \
-		template<typename T1> \
-		struct cu_node<T1> : public ::commonunion::cu_node<cu_node,T1> { \
-			using B = ::commonunion::cu_node<commonunion::cname##union::cu_node,T1>; \
-			using itype = typename B::itype; \
- \
-			using B::B; \
- \
-			FOREACH(WRITEBASEIMPL,__VA_ARGS__) \
- \
-		}; \
- \
-		template<typename... Ts> \
-		struct cu_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
-				public ::commonunion::cu_impl<cu_node,Ts...> { \
-			using B = ::commonunion::cu_impl<commonunion::cname##union::cu_node,Ts...>; \
-			using B::B; \
-			using B::operator=; \
- \
-			FOREACH(WRITEDISPATCH,__VA_ARGS__) \
-		}; \
-	} \
-} \
 template<typename... Ts> \
-using cname = typename splittype::stripdupargs< \
-			typename splittype::flattentype<commonunion::cname##union::cu_impl<>,Ts...>::type \
-		>::type;
+struct cname##_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
+				public commonunion::cu_impl<Ts...> { \
+	using commonunion::cu_impl<Ts...>::cu_impl; \
+ \
+	FOREACH(WRITEDISPATCH,__VA_ARGS__) \
+}; \
+ \
+template<typename... Ts> \
+using cname = \
+	typename splittype::stripdupargs< \
+		typename splittype::flattentype< \
+			cname##_impl<>,Ts...>::type \
+          >::type;
 
 #endif

@@ -43,6 +43,21 @@ namespace splittype {
 		typedef H<Rs...> type;
 	};
 
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H,
+		typename T1, typename T2, typename... Ts>
+	struct splittype_odds<H<C,Rs...>,T1,T2,Ts...> {
+		typedef typename splittype_odds<H<C,Rs...,T1>,Ts...>::type type;
+	};
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H,
+		typename T1>
+	struct splittype_odds<H<C,Rs...>,T1> {
+		typedef H<C,Rs...,T1> type;
+	};
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H>
+	struct splittype_odds<H<C,Rs...>> {
+		typedef H<C,Rs...> type;
+	};
+
 	template<typename... Rs, template<typename...> class H,
 		typename T1, typename T2, typename... Ts>
 	struct splittype_evens<H<Rs...>,T1,T2,Ts...> {
@@ -58,8 +73,154 @@ namespace splittype {
 		typedef H<Rs...> type;
 	};
 
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H,
+		typename T1, typename T2, typename... Ts>
+	struct splittype_evens<H<C,Rs...>,T1,T2,Ts...> {
+		typedef typename splittype_evens<H<C,Rs...,T2>,Ts...>::type type;
+	};   
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H,
+		typename T1>
+	struct splittype_evens<H<C,Rs...>,T1> {
+		typedef H<C,Rs...> type;
+	};
+	template<template<typename...> class C, typename... Rs, template<template<typename...> class, typename...> class H>
+	struct splittype_evens<H<C,Rs...>> {
+		typedef H<C,Rs...> type;
+	};
 	//-----------------------------
+	template<typename...> struct splittype0;
+	template<typename...> struct splittype1;
+	template<typename...> struct splittype2;
+	template<typename...> struct splittype3;
 
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3, typename T4, typename... Ts>
+	struct splittype0<H<Rs...>,T1,T2,T3,T4,Ts...> {
+		typedef typename splittype0<H<Rs...,T1>,Ts...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3, typename T4, typename... Ts>
+	struct splittype1<H<Rs...>,T1,T2,T3,T4,Ts...> {
+		typedef typename splittype1<H<Rs...,T2>,Ts...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3, typename T4, typename... Ts>
+	struct splittype2<H<Rs...>,T1,T2,T3,T4,Ts...> {
+		typedef typename splittype2<H<Rs...,T3>,Ts...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3, typename T4, typename... Ts>
+	struct splittype3<H<Rs...>,T1,T2,T3,T4,Ts...> {
+		typedef typename splittype3<H<Rs...,T4>,Ts...>::type type;
+	};
+
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3>
+	struct splittype0<H<Rs...>,T1,T2,T3> {
+		typedef H<Rs...,T1> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3>
+	struct splittype1<H<Rs...>,T1,T2,T3> {
+		typedef H<Rs...,T2> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3>
+	struct splittype2<H<Rs...>,T1,T2,T3> {
+		typedef H<Rs...,T3> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2, typename T3>
+	struct splittype3<H<Rs...>,T1,T2,T3> {
+		typedef H<Rs...> type;
+	};
+
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2>
+	struct splittype0<H<Rs...>,T1,T2> {
+		typedef H<Rs...,T1> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2>
+	struct splittype1<H<Rs...>,T1,T2> {
+		typedef H<Rs...,T2> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2>
+	struct splittype2<H<Rs...>,T1,T2> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1, typename T2>
+	struct splittype3<H<Rs...>,T1,T2> {
+		typedef H<Rs...> type;
+	};
+
+	template<typename... Rs, template<typename...> class H, typename T1>
+	struct splittype0<H<Rs...>,T1> {
+		typedef H<Rs...,T1> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1>
+	struct splittype1<H<Rs...>,T1> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1>
+	struct splittype2<H<Rs...>,T1> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H, typename T1>
+	struct splittype3<H<Rs...>,T1> {
+		typedef H<Rs...> type;
+	};
+
+	template<typename... Rs, template<typename...> class H>
+	struct splittype0<H<Rs...>> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splittype1<H<Rs...>> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splittype2<H<Rs...>> {
+		typedef H<Rs...> type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splittype3<H<Rs...>> {
+		typedef H<Rs...> type;
+	};
+
+	template<typename...> struct splitargtype0;
+	template<typename...> struct splitargtype1;
+	template<typename...> struct splitargtype2;
+	template<typename...> struct splitargtype3;
+
+	template<typename... Rs, template<typename...> class H>
+	struct splitargtype0<H<Rs...>> {
+		typedef typename splittype0<H<>,Rs...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splitargtype1<H<Rs...>> {
+		typedef typename splittype1<H<>,Rs...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splitargtype2<H<Rs...>> {
+		typedef typename splittype2<H<>,Rs...>::type type;
+	};
+	template<typename... Rs, template<typename...> class H>
+	struct splitargtype3<H<Rs...>> {
+		typedef typename splittype3<H<>,Rs...>::type type;
+	};
+
+	//-----------------------------
+	template<typename,typename...> struct intypelist;
+
+	template<typename T>
+	struct intypelist<T> { enum {value=0}; };
+
+	template<typename T, typename... Ts>
+	struct intypelist<T,T,Ts...> { enum {value=1}; };
+	
+	template<typename T, typename T1, typename... Ts>
+	struct intypelist<T,T1,Ts...> { enum {value=intypelist<T,Ts...>::value}; };
+
+	template<typename, typename>
+	struct isargtype;
+
+	template<typename R1, typename... Rs, template<typename...> class H>
+	struct isargtype<R1,H<Rs...>> { enum { value=intypelist<R1,Rs...>::value}; };
+	template<typename R1, typename... Rs, template<typename...> class C, template<template<typename...> class, typename...> class H>
+	struct isargtype<R1,H<C,Rs...>> { enum { value=intypelist<R1,Rs...>::value}; };
+
+/*
 	template<typename,typename> struct isargtype {
 		enum {value=0 };
 	};
@@ -86,6 +247,7 @@ namespace splittype {
 	struct isargtype<R1,H<R2>> {
 		enum {value=0 };
 	};
+*/
 
 	/*
 	template<typename R1, template<typename...> class H>
