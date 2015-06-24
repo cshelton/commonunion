@@ -494,9 +494,8 @@ namespace commonunion {
 		}
 
 		cu_impl_base &operator=(const cu_impl_base &c) {
-			auto newi = index<decay<T>,Ts...>::value;
-			v.assign(i,newi,c.v);
-			i = newi;
+			v.assign(i,c.i,c.v);
+			i = c.i;
 			return *this;
 		}
 		cu_impl_base &operator=(cu_impl_base &&c) {
@@ -587,17 +586,19 @@ namespace commonunion {
 #define ARGCOMMA(x) x,
 
 #define COMMONUNION(cname,baseclause,...) \
+namespace commonunion { namespace cu_##cname { \
 template<typename... Ts> \
-struct cname##_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
+struct cu_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
 				public commonunion::cu_impl<Ts...> { \
 	using commonunion::cu_impl<Ts...>::cu_impl; \
 	using commonunion::cu_impl<Ts...>::operator=; \
  \
 	FOREACH(WRITEDISPATCH,__VA_ARGS__) \
 }; \
+} } \
  \
 template<typename... Ts> \
-using cname = typename splittype::flattenandadd<cname##_impl<>,Ts...>::type;
+using cname = typename splittype::flattenandadd<commonunion::cu_##cname::cu_impl<>,Ts...>::type;
 
 /*
 using cname = \
