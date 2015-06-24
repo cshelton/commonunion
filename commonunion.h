@@ -43,15 +43,16 @@
 namespace commonunion {
 
 	using splittype::isargtype;
+	using splittype::intypelist;
 
      template<std::size_t N>
      struct largeenoughint {
           typedef typename std::conditional<
-					N<(1L<<8), uint_least8_t,
+					N<=(1L<<8), uint_least8_t,
                     typename std::conditional<
-                         N<(1L<<16), uint_least16_t,
+                         N<=(1L<<16), uint_least16_t,
                     typename std::conditional<
-                         N<(1L<<32), uint_least32_t, uint_least64_t>::type
+                         N<=(1L<<32), uint_least32_t, uint_least64_t>::type
                     >::type
                >::type type;
 		//typedef std::size_t type;
@@ -94,6 +95,55 @@ namespace commonunion {
 	struct istemplatebase<H,H2<Ts...>> {
 		enum {value=std::is_base_of<H<Ts...>,H2<Ts...>>::value};
 	};
+
+	//------------------
+
+	template<typename...> struct typelist;
+
+	template<std::size_t V, typename,typename> struct indeximpl;
+
+	template<typename T, typename... Ts> struct index {
+		enum {value=indeximpl<0,T,typelist<Ts...>>::value };
+	};
+
+	template<std::size_t V, typename T, typename... Ts>
+	struct indeximpl<V,T,typelist<T,Ts...>> {
+		enum { value=V };
+	};
+	template<std::size_t V, typename T, typename R, typename... Ts>
+	struct indeximpl<V,T,typelist<R,Ts...>> {
+		enum { value=indeximpl<V+1,T,typelist<Ts...>>::value };
+	};
+	template<std::size_t V, typename T>
+	struct indeximpl<V,T,typelist<>> {
+		enum { value=-1 };
+	};
+
+	template<typename FROM, typename TO> struct reindeximpl;
+
+	template<typename F1, typename... Fs, typename... Ts>
+	struct reindeximpl<typelist<F1,Fs...>,typelist<Ts...>> {
+		template<std::size_t I>
+		constexpr std::size_t exec(std::size_t findex) const {
+			switch(findex) {
+				case I: return index<F1,Ts...>::value;
+				default: return reindeximpl<typelist<Fs...>,typelist<Ts...>>{}.template exec<I+1>(findex);
+			}
+		}
+	};
+	template<typename... Ts>
+	struct reindeximpl<typelist<>,typelist<Ts...>> {
+		template<std::size_t I>
+		constexpr std::size_t exec(std::size_t findex) const {
+			return -1;
+		}
+	};
+
+	template<typename L1, typename L2>
+	constexpr std::size_t reindex(std::size_t findex) {
+		return reindeximpl<L1,L2>{}.template exec<0>(findex);
+	}
+
 
 	//------------------
 	//
@@ -196,24 +246,13 @@ namespace commonunion {
 		using type2 = typename splittype::splitargtype_evens<cu_node_base<T1,T2,Ts...>>::type;
 		using itype = typename argstoindextype<T1,T2,Ts...>::type;
 
-		template<typename T, typename EN=void>
-		struct index { enum {value=0}; };
-		template<typename T>
-		struct index<T,typename std::enable_if<
-						isargtype<decay<T>,type1>::value>::type> {
-			enum {value=type1::template index<T>::value*2}; };
-		template<typename T>
-		struct index<T,typename std::enable_if<
-						isargtype<decay<T>,type2>::value>::type> {
-			enum {value=1+type2::template index<T>::value*2}; };
-
 		constexpr cu_node_base(dummyT) : x() {};
 
 		template<typename T,
 			typename std::enable_if<isargtype<decay<T>,type1>::value>::type *En=nullptr>
 		constexpr cu_node_base(T &&t) : x(std::false_type{},std::forward<T>(t)) {}
 		template<typename T,
-			typename std::enable_if<isargtype<decay<T>,type2>::value>::type *En=nullptr>
+			typename std::enable_if<!isargtype<decay<T>,type1>::value>::type *En=nullptr>
 		constexpr cu_node_base(T &&t) : x(std::true_type{},std::forward<T>(t)) {}
 
 		template<typename... Ss>
@@ -228,13 +267,6 @@ namespace commonunion {
 		void assign(itype fromplace, itype toplace, V &&...v) {
 			x.assign(lastbit(fromplace),lastbit(toplace),
 			  restbits(fromplace),restbits(toplace),std::forward<V>(v)...);
-		}
-
-		template<typename... Ss>
-		static constexpr typename cu_node_base<Ss...>::itype reindex(itype i) {
-			if (lastbit(i))
-				return type2::template reindex<Ss...>(restbits(i));
-			else return type1::template reindex<Ss...>(restbits(i));
 		}
 
 		template<typename T,
@@ -301,9 +333,6 @@ namespace commonunion {
 		template<typename... Ss>
 		using mybase = cu_node_base<Ss...>;
 
-		template<typename T, typename EN=void>
-		struct index { enum {value=0}; };
-
 		template<typename... Ts>
 		constexpr cu_node_base(Ts &&...arg) : t1(std::forward<Ts>(arg)...) {}
 
@@ -329,6 +358,14 @@ namespace commonunion {
 		template<typename V,
 			typename std::enable_if<!istemplateinst<mybase,decay<V>>::value>::type *En=nullptr>
 		void assign(itype fromplace, itype toplace, V &&v) {
+			throw std::logic_error("invalid type conversion");
+		}
+
+		void assign(itype fromplace, itype toplace, T1 &&v) {
+			t1 = std::move(v);
+		}
+
+		void assign(itype fromplace, itype toplace, const T1 &v) {
 			t1 = v;
 		}
 
@@ -342,11 +379,6 @@ namespace commonunion {
 			t1 = std::move(c).template get<T1>();
 		}
 			
-
-		template<typename... Ss>
-		static constexpr typename cu_node_base<Ss...>::itype reindex(itype i) {
-			return cu_node_base<Ss...>::template index<T1>::value;
-		}
 
 		template<typename T,
 			typename std::enable_if<std::is_same<T,T1>::value>::type *En=nullptr>
@@ -437,54 +469,53 @@ namespace commonunion {
 		template<typename T,
 			typename std::enable_if<!istemplatebase<mybase,decay<T>>::value>::type *En=nullptr>
 		explicit constexpr cu_impl_base(T &&t) : v(std::forward<T>(t)),
-				i(baseT::template index<decay<T>>::value) {}
+				i(index<decay<T>,Ts...>::value) {}
 
 		explicit constexpr cu_impl_base(const cu_impl_base &c) : v(c.i,c.v), i(c.i) {}
 		explicit constexpr cu_impl_base(cu_impl_base &&c) : v(c.i,std::move(c.v)), i(c.i) {}
 
 		template<typename... Ss>
 		explicit constexpr cu_impl_base(const cu_impl_base<Ss...> &c)
-				: v(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i),c.v),
-				  i(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i)) {}
+				: v(reindex<typelist<Ss...>,typelist<Ts...>>(c.i),c.v),
+				  i(reindex<typelist<Ss...>,typelist<Ts...>>(c.i)) {}
 
 		template<typename... Ss>
 		explicit constexpr cu_impl_base(cu_impl_base<Ss...> &&c)
-				: v(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i),std::move(c.v)),
-				  i(cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i)) {}
+				: v(reindex<typelist<Ss...>,typelist<Ts...>>(c.i),std::move(c.v)),
+				  i(reindex<typelist<Ss...>,typelist<Ts...>>(c.i)) {}
 
 		template<typename T,
-			typename std::enable_if<!istemplatebase<mybase,decay<T>>::value>::type *En=nullptr>
+			typename std::enable_if<intypelist<T,Ts...>::value>::type *En=nullptr>
 		cu_impl_base &operator=(T &&t) {
-			auto oldi = i;
-			i = baseT::template index<decay<T>>::value;
-			v.assign(oldi,i,std::forward<T>(t));
+			auto newi = index<decay<T>,Ts...>::value;
+			v.assign(i,newi,std::forward<T>(t));
+			i = newi;
 			return *this;
 		}
 
 		cu_impl_base &operator=(const cu_impl_base &c) {
-			auto oldi = i;
-			i = c.i;
-			v.assign(oldi,i,c.v);
+			auto newi = index<decay<T>,Ts...>::value;
+			v.assign(i,newi,c.v);
+			i = newi;
 			return *this;
 		}
 		cu_impl_base &operator=(cu_impl_base &&c) {
-			auto oldi = i;
+			v.assign(i,c.i,std::move(c.v));
 			i = c.i;
-			v.assign(oldi,i,std::move(c.v));
 			return *this;
 		}
 		template<typename... Ss>
 		cu_impl_base &operator=(const cu_impl_base<Ss...> &c) {
-			auto oldi = i;
-			i = cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i);
-			v.assign(oldi,i,c.v);
+			auto newi = reindex<typelist<Ss...>,typelist<Ts...>>(c.i);
+			v.assign(i,newi,c.v);
+			i = newi;
 			return *this;
 		}
 		template<typename... Ss>
 		cu_impl_base &operator=(cu_impl_base<Ss...> &&c) {
-			auto oldi = i;
-			i = cu_impl_base<Ss...>::baseT::template reindex<Ts...>(c.i);
-			v.assign(oldi,i,std::move(c.v));
+			auto newi = reindex<typelist<Ss...>,typelist<Ts...>>(c.i);
+			v.assign(i,newi,std::move(c.v));
+			i = newi;
 			return *this;
 		}
 
@@ -560,15 +591,19 @@ template<typename... Ts> \
 struct cname##_impl : IFEMPTY(IGNOREARG,ARGCOMMA,baseclause,baseclause) \
 				public commonunion::cu_impl<Ts...> { \
 	using commonunion::cu_impl<Ts...>::cu_impl; \
+	using commonunion::cu_impl<Ts...>::operator=; \
  \
 	FOREACH(WRITEDISPATCH,__VA_ARGS__) \
 }; \
  \
 template<typename... Ts> \
+using cname = typename splittype::flattenandadd<cname##_impl<>,Ts...>::type;
+
+/*
 using cname = \
 	typename splittype::stripdupargs< \
 		typename splittype::flattentype< \
 			cname##_impl<>,Ts...>::type \
-          >::type;
-
+          >::type; \
+*/
 #endif

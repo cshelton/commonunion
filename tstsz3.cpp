@@ -152,6 +152,10 @@ struct FooUnionimpl<T1,Ts...> {
 	}
 };
 
+template<typename... Ts>
+using inlst = splittype::intypelist<Ts...>;
+
+/*
 template<typename...> struct inlst;
 
 template<typename T>
@@ -162,6 +166,7 @@ struct inlst<T,T,Ts...> { enum {value=1}; };
 
 template<typename T, typename R, typename... Ts>
 struct inlst<T,R,Ts...> { enum {value=inlst<T,Ts...>::value}; };
+*/
 
 template<typename... Ts>
 struct FooUnion {
@@ -202,13 +207,16 @@ struct FooUnion {
 COMMONUNION(FooUnionOrig,,foo)
 
 template<typename... Ts>
-//using FooU = FooUnionOrig<Ts...>; // 12 seconds
+using FooU = FooUnionOrig<Ts...>; // 12 seconds
 //using FooU = FooUnion<Ts...>; // 0.4 seconds
+/*
 using FooU = typename splittype::stripdupargs<
 			typename splittype::flattentype<
 				FooUnion<>,Ts...
 			>::type
 			>::type; // 16 seconds! (stripdupargs takes all of the time!)
+	// new version now solves this!
+*/
 
 int main(int argc, char **argv) {
 /*
@@ -227,11 +235,12 @@ int main(int argc, char **argv) {
 	FooU<A,B,C,D,E,F,G,H,I,J,Z,K,L,M,N,O> fu2{fu};
 	fu2.foo();
 
+	fu2 = C{};
+	fu2.foo();
+
 	fu2 = fu;
 	fu2.foo();
 
-	fu2 = C{};
-	fu2.foo();
 	
 /*
  */

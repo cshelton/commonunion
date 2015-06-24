@@ -134,7 +134,7 @@ constexpr auto uptoNbytes() {
 #include <typeinfo>
 using namespace std;
 
-constexpr std::size_t N = 15;
+constexpr std::size_t N = 60;
 
 int main(int argc, char **argv) {
 	cout << "A sz: " << sizeof(A) << endl;
