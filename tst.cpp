@@ -1,24 +1,28 @@
 #include "commonunion.h"
+#include <iostream>
 
-COMMONUNION(FooUnion,,foo,bar)
+COMMONUNION(FooUnion,,foo,bar,baz)
 
 struct A {
     int i;
     constexpr A(int initi) : i(initi) {}
     constexpr int foo(int a) const { return i+a; }
-    constexpr int bar() const { return i*2; }
+    constexpr int bar() const { return i*2; }	
+	void baz() const { std::cout << bar() << std::endl; }
 };
 struct B {
     int i;
     constexpr B(int initi) : i(initi) {}
     constexpr int foo(int a) const { return i*a; }
     constexpr int bar() const { return i*i; }
+	void baz() const { std::cout << bar() << std::endl; }
 };
 struct C {
     int i,j;
     constexpr C(int initi, int initj) : i(initi), j(initj) {}
     constexpr int foo(int a) const { return (i+(j*a))/j; }
     constexpr int bar() const { return 2*i/j; }
+	void baz() const { std::cout << bar() << std::endl; }
 };
 
 template<typename T>
@@ -48,9 +52,8 @@ struct Nbytes {
 	unsigned char a[N];
 };
 
-COMMONUNION(Foo2Union,public base<cu_impl<Ts...>>,foo,bar)
+COMMONUNION(Foo2Union,public base<cu_impl<Ts...>>,foo,bar,baz)
 
-#include <iostream>
 using namespace std;
 
 int main(int argc, char **argv) {
@@ -93,5 +96,7 @@ int main(int argc, char **argv) {
 	cout << "2/3 sz: " << sizeof(FooUnion<Nbytes<2>,Nbytes<3>>) << endl;
 	cout << "2/3/4 sz: " << sizeof(FooUnion<Nbytes<2>,Nbytes<3>,Nbytes<4>>) << endl;
 	cout << "2/3/4/5 sz: " << sizeof(FooUnion<Nbytes<2>,Nbytes<3>,Nbytes<4>,Nbytes<5>>) << endl;
+	cout << "--------------" << endl;
+	cout << "3: "; u2.baz();
 }
 	

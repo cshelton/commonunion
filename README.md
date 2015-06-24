@@ -191,4 +191,3 @@ The implementation is relatively straight-forward.  It keeps a union of the unde
 To Do
 -----
 * Add noexcept clauses to all methods.  All methods, constructors, destructors, etc should be noexcept if possible.  Not hard to add all of the clauses, just a pain.
-* add support for "void" return values
