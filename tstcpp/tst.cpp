@@ -1,4 +1,4 @@
-#include "commonunion.h"
+#include "../commonunion.h"
 #include <iostream>
 
 COMMONUNION(FooUnion,,foo,bar,baz)

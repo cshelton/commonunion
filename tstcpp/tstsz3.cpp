@@ -1,6 +1,6 @@
 #include <iostream>
 #include <typeinfo>
-#include "splittype.h"
+#include "../splittype.h"
 
 using namespace std;
 
@@ -203,7 +203,7 @@ struct FooUnion {
 	}
 };
 
-#include "commonunion.h"
+#include "../commonunion.h"
 COMMONUNION(FooUnionOrig,,foo)
 
 template<typename... Ts>

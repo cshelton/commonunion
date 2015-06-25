@@ -1,4 +1,4 @@
-#include "commonunion.h"
+#include "../commonunion.h"
 
 COMMONUNION(FooUnion,,foo,bar)
 
